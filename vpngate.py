@@ -407,7 +407,7 @@ def build_outputs(results, raw_count, sstp_count, source):
     return data
 
 
-CHAIN_URL = os.environ.get("CHAIN_URL", "https://jerylihub.github.io/gate/chains.txt")
+CHAIN_URL = os.environ.get("CHAIN_URL", "https://bgy8023.github.io/gate/chains.txt")
 
 
 def build_chains_text(data):
@@ -466,23 +466,24 @@ EDGE_HOSTS = [
     if h.strip()
 ]
 
-HOSTS_URL = os.environ.get("HOSTS_URL", "https://jerylihub.github.io/gate/hosts.txt")
-NODES_URL = os.environ.get("NODES_URL", "https://jerylihub.github.io/gate/nodes.txt")
+HOSTS_URL = os.environ.get("HOSTS_URL", "https://bgy8023.github.io/gate/hosts.txt")
+NODES_URL = os.environ.get("NODES_URL", "https://bgy8023.github.io/gate/nodes.txt")
 
 
 def build_hosts_text(data):
     """生成可直接粘贴到 edgetunnel 后台「自定义优选IP」框的清单。
     每行 = 入口地址#名字$sstp://... ; 名字固定, 底下 SSTP 节点每 30 分钟自动换。"""
     countries = data["countries"]
-    # 入口: 默认用 7 个实测可用优选域名循环分配; 可用 HOSTS_ENTRY 覆盖(逗号分隔)
+    # 入口: 默认 = 自建 edgetunnel 域名 + 7 个实测可用优选域名 循环分配; 可用 HOSTS_ENTRY 覆盖(逗号分隔)
     _entry = os.environ.get("HOSTS_ENTRY", "").strip()
-    edge = [e.strip() for e in _entry.split(",") if e.strip()] or EDGE_HOSTS or [f"{EDT_DOMAIN}:443"]
+    edge = [e.strip() for e in _entry.split(",") if e.strip()] or ([f"{EDT_DOMAIN}:443"] + EDGE_HOSTS)
     lines = [
         "# edgetunnel「自定义优选IP」清单 (整段复制, 追加到后台现有内容后面)",
         f"# 自动更新: {data['generated_at']} (每 30 分钟重新检测)",
         f"# 固定地址: {HOSTS_URL}",
+        f"# UUID: {EDT_UUID} (自建入口 {EDT_DOMAIN} 对应的 edgetunnel 部署)",
         "# 每行 = 入口地址#名字$sstp://vpn:vpn@节点:端口",
-        "# 入口用 7 个实测可用优选域名循环分配",
+        f"# 入口 = 自建 {EDT_DOMAIN}:443 + 7 个实测可用优选域名 循环分配",
         "# 名字 = 国家-住宅/机房-编号, 直接区分住宅与机房",
         "# 名字固定; 只有 $sstp:// 后面的节点地址每 30 分钟自动更换",
         "# 账号密码固定 vpn:vpn ; 节点端口必须保留",
@@ -526,7 +527,7 @@ def build_hosts_text(data):
 EDT_UUID = os.environ.get("EDT_UUID", "6ac7804b-6671-4840-88c4-80e39c8ac46d")
 EDT_DOMAIN = os.environ.get("EDT_DOMAIN", "ed.mars1024.com")
 EDT_FINGERPRINT = os.environ.get("EDT_FINGERPRINT", "chrome")
-SUB_URL = os.environ.get("SUB_URL", "https://jerylihub.github.io/gate/sub.txt")
+SUB_URL = os.environ.get("SUB_URL", "https://bgy8023.github.io/gate/sub.txt")
 
 
 def _b64_secret_encode(plaintext, secret):
@@ -563,10 +564,13 @@ def _socks5_account(address, default_port=80):
 
 def build_sub_text(data):
     """生成 edgetunnel 完整 vless:// 订阅 (链式代理编码在 path)。
-    填进 edgetunnel 后台「订阅链接」URL, 客户端定时拉取即可自动轮换。"""
+    填进 edgetunnel 后台「订阅链接」URL, 客户端定时拉取即可自动轮换。
+    注意: 本函数返回明文; 写出 sub.txt 时整体 base64 编码 (见 write_outputs),
+    base64 -d 解码后即为头部注释 + vless:// 链接。"""
     countries = data["countries"]
     lines = [
         "# edgetunnel 完整订阅 (vless://) —— 填进后台「订阅链接」URL",
+        "# 本文件整体 base64 编码 (标准订阅格式); base64 解码后即为以下明文",
         f"# 自动更新: {data['generated_at']} (每 30 分钟重新检测)",
         f"# 固定地址: {SUB_URL}",
         f"# 节点域名: {EDT_DOMAIN} (传输 ws / TLS / fingerprint {EDT_FINGERPRINT})",
@@ -640,9 +644,10 @@ def write_outputs(data):
         f.write("\n".join(nodes_lines) + ("\n" if nodes_lines else ""))
 
     # 完整 vless:// 订阅 (填进后台「订阅链接」URL, 客户端自动轮换)
+    # 整文件 base64 编码 (标准 v2ray 订阅格式): base64 -d 后即为明文头部 + vless:// 链接
     sub_path = os.path.join(PUBLIC_DIR, "sub.txt")
     with open(sub_path, "w", encoding="utf-8") as f:
-        f.write(build_sub_text(data))
+        f.write(base64.b64encode(build_sub_text(data).encode("utf-8")).decode("ascii") + "\n")
     return data_path, html_path, chains_path, hosts_path, nodes_path, sub_path
 
 
