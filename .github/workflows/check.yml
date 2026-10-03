@@ -39,6 +39,20 @@ jobs:
           CHECK_CONCURRENCY: "32"
           CHECK_TIMEOUT: "90"
 
+      - name: Sync hosts.txt to Cloudflare KV (panel ADD.txt)
+        run: |
+          resp=$(curl -sS --max-time 30 --retry 3 --retry-all-errors -X PUT \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${CF_KV_NAMESPACE}/values/ADD.txt" \
+            -H "Authorization: Bearer ${CLOUDFLARE_KV_TOKEN}" \
+            -H "Content-Type: text/plain" \
+            --data-binary @public/hosts.txt)
+          echo "$resp" | grep -q '"success":true' || { echo "KV sync failed: $resp"; exit 1; }
+          echo "KV ADD.txt synced ($(wc -l < public/hosts.txt) lines)"
+        env:
+          CF_ACCOUNT_ID: "fdf04aa318f8fe6b7f73f8f64ec1e731"
+          CF_KV_NAMESPACE: "ee3fdad1613643f582667b3082413c06"
+          CLOUDFLARE_KV_TOKEN: ${{ secrets.CLOUDFLARE_KV_TOKEN }}
+
       - name: Ensure GitHub Pages is enabled (one-time auto setup)
         run: |
           code=$(curl -s -o /dev/null -w '%{http_code}' \
